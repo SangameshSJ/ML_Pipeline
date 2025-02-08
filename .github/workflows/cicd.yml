@@ -1,0 +1,48 @@
+name: ML Model CI/CD
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/
+
+      - name: Login to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "20012024" --password-stdin
+
+      - name: Build & Push Docker Image
+        run: |
+          docker build -t 20012024/ml-model:latest .
+          docker push 20012024/ml-model:latest
+
+      - name: Setup Kubernetes CLI
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+
+      - name: Send Deployment Notification
+        run: |
+          curl -X POST -H 'Content-type: application/json' --data '{"text":"✅ ML Model deployed to Kubernetes!"}' ${{ secrets.SLACK_WEBHOOK_URL }}
